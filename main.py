@@ -52,8 +52,7 @@ class Player():
         return self.__stack_
 
     def change_card(self, card, idx):
-
-    # TODO: przyjmuje nową kartę, wstawia ją za kartę o indeksie idx, zwraca kartę wymienioną
+        # TODO: przyjmuje nową kartę, wstawia ją za kartę o indeksie idx, zwraca kartę wymienioną
 
     def get_player_hand(self):
         return tuple(self.__hand_)
@@ -62,3 +61,12 @@ class Player():
         # TODO: definicja metody, zwraca stringa z kartami gracza
         pass
 
+    def hand_rank(self):
+        # TODO: definicja metody, zwraca to co mamy na rece, mozliwe kombinacje np. dwie pary
+        hands = [[('10', 'h'), ('J', 'h'), ('D', 'h'), ('K', 'h'), ('A', 'h')],  # Przykład: poker królewski        : 10
+                 [('A', 'c'), ('A', 's'), ('A', 'h'), ('A', 'd'), ('8', 's')],  # Przykład: kareta                 : 8
+                 [('5', 'c'), ('6', 'd'), ('7', 'h'), ('8', 's'), ('9', 'd')],  # Przykład: strit                  : 5
+                 [('A', 's'), ('2', 'h'), ('3', 'd'), ('4', 'c'), ('5', 's')],  # Przykład: też strit, (As jako 1) : 5
+                 [('2', 'c'), ('2', 'd'), ('5', 'h'), ('9', 's'), ('K', 'd')]  # Przykład: jedna para             : 2
+                 ]
+        pass
