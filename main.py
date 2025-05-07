@@ -72,30 +72,49 @@ class Player():
         ranks = [card.rank for card in self.__hand_]
         suits = [card.suit for card in self.__hand_]
 
-        is_straight = False
-        sorted_ranks = sorted(ranks, key=lambda x: ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A'].index(x))
-        if sorted_ranks == ['2', '3', '4', '5', '6'] or sorted_ranks == ['3', '4', '5', '6', '7']:
-            is_straight = True
+        rank_values = {'2': 2, '3': 3, '4': 4, '5': 5,
+                       '6': 6, '7': 7, '8': 8, '9': 9,
+                       '10': 10, 'J': 11, 'Q': 12, 'K': 13, 'A': 14}
+
+        values = sorted([rank_values[rank] for rank in ranks])
+        is_flush = len(set(suits)) == 1
+
+        # Sprawdzenie strita
+        is_straight = (
+            all(values[i] == values[i - 1] + 1 for i in range(1, 5)) or
+            values == [2, 3, 4, 5, 14]
+        )
 
         rank_count = {rank: ranks.count(rank) for rank in ranks}
         sorted_counts = sorted(rank_count.values(), reverse=True)
 
-        if sorted_counts == [4, 1]:  # Kareta
-            return 8
-        elif sorted_counts == [3, 2]:  # Full
-            return 7
-        elif sorted_counts == [3, 1, 1]:  # Trójka
-            return 4
-        elif sorted_counts == [2, 2, 1]:  # Dwie pary
-            return 3
-        elif sorted_counts == [2, 1, 1, 1]:  # Para
-            return 2
-        elif is_straight:  # Strit
-            return 5
-        else:
-            return 0  # Brak układu
+        # Układy
+        if is_flush and sorted(values) == [10, 11, 12, 13, 14]:
+            return "Poker królewski"
+        if is_flush and is_straight:
+            return "Poker"
+        if sorted_counts == [4, 1]:
+            return "Kareta"
+        if sorted_counts == [3, 2]:
+            return "Full"
+        if is_flush:
+            return "Kolor"
+        if is_straight:
+            return "Strit"
+        if sorted_counts == [3, 1, 1]:
+            return "Trójka"
+        if sorted_counts == [2, 2, 1]:
+            return "Dwie pary"
+        if sorted_counts == [2, 1, 1, 1]:
+            return "Para"
+
+        return "Wysoka karta"
+
     def __str__(self):
         return f"{self.__name_}: {self.cards_to_str()}"
+
+
+
 
 class GameEngine:
     def __init__(self, players: List[Player], deck: Deck,
