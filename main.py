@@ -1,6 +1,6 @@
 import random
-
-
+import datetime
+from typing import List
 class Card:
     # słownik symboli unicode
     unicode_dict = {'s': '\u2660', 'h': '\u2665', 'd': '\u2666', 'c': '\u2663'}
@@ -149,3 +149,28 @@ class GameEngine:
         Zwraca: nową listę 5 kart.
         Stare karty odkłada na spód talii.
         """
+
+    def end_round_and_save(self, game_id: str, session_manager: SessionManager):
+        hand_data = {
+            "game_id": game_id,
+            "timestamp": datetime.now().isoformat(),
+            "stage": "showdown",
+            "players": [
+                {"id": i + 1, "name": p._Player__name_, "stack": p.get_stack_amount()}
+                for i, p in enumerate(self.players)
+            ],
+            "deck": [str(card) for card in self.deck.cards],
+            "hands": {
+                str(i + 1): [str(c) for c in p.get_player_hand()]
+                for i, p in enumerate(self.players)
+            },
+            "bets": self.bets,
+            "current_player": self.current_player_id,
+            "pot": self.pot,
+            "hand_ranks": {
+                str(i + 1): p.hand_rank() for i, p in enumerate(self.players)
+            },
+            "winner_id": self.winner_id
+        }
+
+        session_manager.append_hand_history(game_id, hand_data)

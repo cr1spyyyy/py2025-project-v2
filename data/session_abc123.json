@@ -1,0 +1,30 @@
+{
+  "game_id": "abc123",
+  "timestamp": "2025-05-14T12:30:00",
+  "players": [
+    {"id": 1, "name": "Alice", "stack": 1200},
+    {"id": 2, "name": "Bob", "stack": 800}
+  ],
+  "deck": ["AS", "KD", "3H", "7C", "..."],
+  "hands": {
+    "1": ["AS", "3H", "7C", "9D", "KD"],
+    "2": ["2S", "4C", "8D", "KH", "QC"]
+  },
+  "bets": [
+    {"stage": "pre-flop", "player_id": 1, "action": "raise", "amount": 50, "pot": 75},
+    {"stage": "pre-flop", "player_id": 2, "action": "call", "amount": 50, "pot": 125}
+  ],
+  "current_player": 2,
+  "pot": 125,
+  "history": [
+    {
+      "round": 1,
+      "winner_id": 1,
+      "pot": 100,
+      "hand_ranks": {
+        "1": "Kolor",
+        "2": "Para"
+      }
+    }
+  ]
+}
