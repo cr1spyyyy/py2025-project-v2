@@ -1,0 +1,39 @@
+
+=== Sesja gry rozpoczęta: 2025-05-31 13:39:30 ===
+[2025-05-31 13:39:30] Aplikacja Pokera uruchomiona.
+[2025-05-31 13:39:30] Wczytano konfigurację z config.json: {'difficulty': 'medium', 'initial_stack': 1000, 'small_blind': 25, 'big_blind': 50, 'num_players': 2}
+[2025-05-31 13:39:30] Utworzono 2 graczy z początkowym stackiem 1000.
+[2025-05-31 13:39:30] ====== NOWA RUNDA #1 ======
+[2025-05-31 13:39:30] Stworzono nową talię (52 kart).
+[2025-05-31 13:39:30] Wyczyszczono ręce graczy.
+[2025-05-31 13:39:30] Dealerem jest: Gracz_1
+[2025-05-31 13:39:30] --- Rozpoczęcie stawiania blindów ---
+[2025-05-31 13:39:30] Gracz Gracz_2 stawia małą w ciemno: 25. Stack: 975
+[2025-05-31 13:39:30] Gracz Gracz_1 stawia dużą w ciemno: 50. Stack: 950
+[2025-05-31 13:39:30] Aktualny zakład do wyrównania po blindach: 50. Pula: 75
+[2025-05-31 13:39:30] Pierwszy do akcji: Gracz_2
+[2025-05-31 13:39:30] --- Rozdawanie kart ---
+[2025-05-31 13:39:30] Gracz Gracz_1 otrzymuje kartę 4♥.
+[2025-05-31 13:39:30] Gracz Gracz_2 otrzymuje kartę 9♥.
+[2025-05-31 13:39:30] Gracz Gracz_1 otrzymuje kartę 6♦.
+[2025-05-31 13:39:30] Gracz Gracz_2 otrzymuje kartę 7♦.
+[2025-05-31 13:39:30] Gracz Gracz_1 otrzymuje kartę 7♣.
+[2025-05-31 13:39:30] Gracz Gracz_2 otrzymuje kartę A♥.
+[2025-05-31 13:39:30] Gracz Gracz_1 otrzymuje kartę 2♥.
+[2025-05-31 13:39:30] Gracz Gracz_2 otrzymuje kartę 6♣.
+[2025-05-31 13:39:30] Gracz Gracz_1 otrzymuje kartę K♠.
+[2025-05-31 13:39:30] Gracz Gracz_2 otrzymuje kartę Q♠.
+[2025-05-31 13:39:30] --- Rozpoczęcie rundy licytacji. Pula: 75, Do wyrównania: 50 ---
+[2025-05-31 13:39:30] Tura gracza: Gracz_2. Stack: 975, Do wyrównania: 25, Karty: A♥, Q♠, 9♥, 7♦, 6♣
+[2025-05-31 13:39:33] Gracz Gracz_2 próbuje wykonać akcję: fold
+[2025-05-31 13:39:33] Gracz Gracz_2 spasował. Stack: 975
+[2025-05-31 13:39:33] Licytacja zakończona - pozostał jeden lub mniej graczy.
+[2025-05-31 13:39:33] --- Zakończenie rundy licytacji. Pula: 75 ---
+[2025-05-31 13:39:33] Gra kończy się po licytacji, jeden lub mniej graczy.
+[2025-05-31 13:39:33] --- Rozpoczęcie Showdown. Pula: 75 ---
+[2025-05-31 13:39:33] Gracz Gracz_1 wygrywa 75 jako jedyny pozostały. Stack: 1025
+[2025-05-31 13:39:33] --- Podsumowanie Stacków po rundzie ---
+[2025-05-31 13:39:33] Gracz Gracz_1: 1025
+[2025-05-31 13:39:33] Gracz Gracz_2: 975
+[2025-05-31 13:39:34] Gracz zdecydował się zakończyć grę.
+[2025-05-31 13:39:34] === Sesja gry zakończona ===

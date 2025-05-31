@@ -2,5 +2,6 @@
   "difficulty": "medium",
   "initial_stack": 1000,
   "small_blind": 25,
-  "big_blind": 50
+  "big_blind": 50,
+  "num_players": 2
 }
