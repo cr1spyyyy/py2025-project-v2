@@ -1,7 +1,7 @@
 import random
 import json
-import datetime  # Dodany import
-from typing import List, Tuple, Dict, Optional
+import datetime
+from typing import List, Tuple, Dict, Optional, Callable
 
 
 # --- Klasa GameLogger ---
@@ -22,21 +22,23 @@ class GameLogger:
                 f.write(log_entry)
         except IOError:
             print(f"Błąd zapisu logu: {log_entry.strip()}")
+
     def close_session(self):
         timestamp = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        log_entry = f"[{timestamp}] === Sesja gry zakończona definitywnie ===\n"
+        log_entry = f"[{timestamp}] === Sesja gry zakończona ===\n"
         try:
             with open(self.log_file_path, 'a', encoding='utf-8') as f:
                 f.write(log_entry)
         except IOError:
             print(f"Błąd zapisu logu zamknięcia sesji: {log_entry.strip()}")
 
+
 # --- Klasa Card ---
 class Card:
     unicode_dict = {'s': '\u2660', 'h': '\u2665', 'd': '\u2666', 'c': '\u2663'}
     RANK_ORDER = {'2': 2, '3': 3, '4': 4, '5': 5, '6': 6, '7': 7, '8': 8, '9': 9, '10': 10, 'J': 11, 'Q': 12, 'K': 13,
                   'A': 14}
-
+    VALUE_TO_RANK_STR = {v: k for k, v in RANK_ORDER.items()}
     def __init__(self, rank: str, suit: str):
         if rank not in Card.RANK_ORDER:
             raise ValueError(f"Invalid rank: {rank}")
@@ -82,17 +84,20 @@ class Deck():
         return None
 
     def deal(self, players: List['Player'], num_cards: int = 5, logger: Optional[GameLogger] = None):
+        if logger: logger.log("Rozpoczęcie rozdawania kart.")
         for _ in range(num_cards):
             for player in players:
                 if not player.is_folded and len(player._Player__hand_) < 5:
                     card = self.deal_one()
                     if card:
-                        if logger: logger.log(f"Gracz {player.name} otrzymuje kartę {card}.")
+                        log_msg_card = str(card) if player.is_bot else "kartę"
+                        if logger: logger.log(f"Gracz {player.name} otrzymuje {log_msg_card}.")
                         player.take_card(card)
                     else:
                         if logger: logger.log("Talia jest pusta podczas rozdawania.")
                         print("Talia jest pusta!")
                         return
+        if logger: logger.log("Zakończono rozdawanie kart.")
 
     def add_cards_to_bottom(self, discarded_cards: List[Card]):
         self.cards.extend(discarded_cards)
@@ -106,12 +111,13 @@ class Player():
         "Poker": 8, "Poker królewski": 9
     }
 
-    def __init__(self, money: int, name: str = ""):
+    def __init__(self, money: int, name: str = "", is_bot: bool = False):
         self.__stack_ = money
         self.__name_ = name if name else f"Gracz_{random.randint(100, 999)}"
         self.__hand_: List[Card] = []
         self.is_folded: bool = False
         self.current_bet_in_round: int = 0
+        self.is_bot: bool = is_bot
 
     @property
     def name(self) -> str:
@@ -122,10 +128,13 @@ class Player():
         return self.__stack_
 
     @classmethod
-    def create_players(cls, num_players: int, initial_stack: int) -> List['Player']:
+    def create_players(cls, num_players: int, initial_stack: int, human_player_name: str = "Gracz") -> List['Player']:
         player_list: List[Player] = []
-        for i in range(num_players):
-            player_list.append(cls(money=initial_stack, name=f"Gracz_{i + 1}"))
+        # Pierwszy gracz to człowiek
+        player_list.append(cls(money=initial_stack, name=human_player_name, is_bot=False))
+        # Pozostali to boty
+        for i in range(1, num_players):
+            player_list.append(cls(money=initial_stack, name=f"Bot_{i}", is_bot=True))
         return player_list
 
     def take_card(self, card: Card):
@@ -153,8 +162,10 @@ class Player():
     def get_player_hand(self) -> Tuple[Card, ...]:
         return tuple(sorted(self.__hand_, reverse=True))
 
-    def cards_to_str(self) -> str:
+    def cards_to_str(self, reveal_for_human: bool = False) -> str:
         if not self.__hand_: return "Brak kart"
+        if self.is_bot and not reveal_for_human:
+            return "?? " * len(self.__hand_)
         return ', '.join(str(card) for card in sorted(self.__hand_, reverse=True))
 
     def clear_hand(self) -> List[Card]:
@@ -221,8 +232,7 @@ class Player():
 
 # --- Klasa GameEngine ---
 class GameEngine:
-    def __init__(self, players: List[Player], deck: Deck, small_blind: int, big_blind: int,
-                 logger: GameLogger):  # Dodany logger
+    def __init__(self, players: List[Player], deck: Deck, small_blind: int, big_blind: int, logger: GameLogger):
         self.players = players
         self.deck = deck
         self.small_blind_amount = small_blind
@@ -230,7 +240,7 @@ class GameEngine:
         self.pot = 0
         self.dealer_button_idx = -1
         self.current_bet_to_match_in_round = 0
-        self.logger = logger  # Przechowaj logger
+        self.logger = logger
 
     def _get_active_players_in_game(self) -> List[Player]:
         return [p for p in self.players if p.stack > 0]
@@ -238,7 +248,7 @@ class GameEngine:
     def _get_active_players_in_hand(self) -> List[Player]:
         return [p for p in self.players if not p.is_folded and p.stack >= 0]
 
-    def _find_next_player_idx_with_condition(self, start_idx: int, condition_func) -> int:
+    def _find_next_player_idx_with_condition(self, start_idx: int, condition_func: Callable[[Player], bool]) -> int:
         current_idx = start_idx
         for _ in range(len(self.players)):
             if condition_func(self.players[current_idx]):
@@ -302,18 +312,60 @@ class GameEngine:
         first_to_act_idx = self._find_next_player_idx_with_condition(
             (bb_idx + 1) % len(self.players), lambda p: not p.is_folded and p.stack > 0
         )
-        self.logger.log(
-            f"Pierwszy do akcji: {self.players[first_to_act_idx].name if first_to_act_idx != -1 else 'Brak'}")
+        if first_to_act_idx != -1:
+            self.logger.log(f"Pierwszy do akcji: {self.players[first_to_act_idx].name}")
+        else:
+            self.logger.log(f"Brak gracza do pierwszej akcji, prawdopodobnie BB: {self.players[bb_idx].name}")
+            first_to_act_idx = bb_idx
+
         return first_to_act_idx if first_to_act_idx != -1 else bb_idx
 
-    def prompt_action(self, player: Player) -> Tuple[str, int]:
+    def _get_bot_action(self, bot: Player) -> Tuple[str, int]:
+        self.logger.log(
+            f"Tura bota: {bot.name}. Stack: {bot.stack}, Karty: {bot.cards_to_str(True)}")
+        amount_to_call = self.current_bet_to_match_in_round - bot.current_bet_in_round
+        hand_name, hand_value, _ = bot.hand_rank()
+
+        if amount_to_call <= 0:  # Może check/bet
+            if hand_value >= Player.HAND_HIERARCHY["Para"]:
+                bet_amount = min(self.big_blind_amount * 2, bot.stack)
+                if bet_amount > 0:
+                    self.logger.log(f"Bot {bot.name} ma {hand_name} i decyduje się postawić {bet_amount}.")
+                    return ("bet", bet_amount)
+            self.logger.log(f"Bot {bot.name} ma {hand_name} i decyduje się czekać.")
+            return ("check", 0)
+        else:
+            if hand_value >= Player.HAND_HIERARCHY["Dwie pary"] and bot.stack > amount_to_call + self.big_blind_amount:
+                raise_total_amount = self.current_bet_to_match_in_round + self.big_blind_amount
+                self.logger.log(f"Bot {bot.name} ma {hand_name} i decyduje się przebić do {raise_total_amount}.")
+                return ("raise", raise_total_amount)
+            elif hand_value >= Player.HAND_HIERARCHY[
+                "Para"] and amount_to_call <= bot.stack / 4:
+                if amount_to_call <= bot.stack:
+                    self.logger.log(f"Bot {bot.name} ma {hand_name} i decyduje się sprawdzić {amount_to_call}.")
+                    return ("call", 0)
+
+            if amount_to_call > 0 and (hand_value < Player.HAND_HIERARCHY["Para"] or amount_to_call > bot.stack / 3):
+                self.logger.log(
+                    f"Bot {bot.name} ma {hand_name} i decyduje się spasować wobec zakładu {amount_to_call}.")
+                return ("fold", 0)
+
+            if amount_to_call <= bot.stack:
+                self.logger.log(
+                    f"Bot {bot.name} (ostateczność) ma {hand_name} i decyduje się sprawdzić {amount_to_call}.")
+                return ("call", 0)
+            else:
+                self.logger.log(f"Bot {bot.name} (ostateczność, brak stacka) ma {hand_name} i decyduje się spasować.")
+                return ("fold", 0)
+
+    def prompt_human_action(self, player: Player) -> Tuple[str, int]:
         amount_to_call = self.current_bet_to_match_in_round - player.current_bet_in_round
         self.logger.log(
-            f"Tura gracza: {player.name}. Stack: {player.stack}, Do wyrównania: {max(0, amount_to_call)}, Karty: {player.cards_to_str()}")
+            f"Tura gracza: {player.name}. Stack: {player.stack}, Do wyrównania: {max(0, amount_to_call)}, Karty: {player.cards_to_str(True)}")  # Gracz widzi swoje karty
         print(f"\n{player.name}, twoja kolej (Stack: {player.stack}, Pula: {self.pot})")
         print(
             f"Do tej pory postawiłeś: {player.current_bet_in_round}. Do wyrównania: {self.current_bet_to_match_in_round}.")
-        print(f"Twoje karty: {player.cards_to_str()}")
+        print(f"Twoje karty: {player.cards_to_str(True)}")
 
         available_actions = ["fold"]
         if amount_to_call <= 0:
@@ -401,7 +453,6 @@ class GameEngine:
             return
 
         current_actor_queue_idx = 0
-        last_raiser_idx = -1
 
         betting_continues = True
         while betting_continues:
@@ -414,41 +465,42 @@ class GameEngine:
             all_matched_or_folded_or_all_in = True
             player_to_act_this_loop = False
 
-            players_still_in_pot = []
-            for p_idx in acting_players_indices:
-                p = self.players[p_idx]
-                if not p.is_folded:
-                    players_still_in_pot.append(p)
-                    if p.stack > 0 and p.current_bet_in_round < self.current_bet_to_match_in_round:
+            for p_idx_check in acting_players_indices:
+                p_check = self.players[p_idx_check]
+                if not p_check.is_folded:
+                    if p_check.stack > 0 and p_check.current_bet_in_round < self.current_bet_to_match_in_round:
                         all_matched_or_folded_or_all_in = False
-                    if p.stack > 0:
+                    if p_check.stack > 0:
                         player_to_act_this_loop = True
 
-            if all_matched_or_folded_or_all_in and player_to_act_this_loop == False:
+            if all_matched_or_folded_or_all_in and not player_to_act_this_loop:
                 self.logger.log("Licytacja zakończona - wszyscy wyrównali lub są all-in/spasowani.")
                 betting_continues = False
                 break
 
             if current_actor_queue_idx >= len(acting_players_indices):
-                all_bets_equal = True
-                for p_idx_check in acting_players_indices:
-                    p_check = self.players[p_idx_check]
-                    if not p_check.is_folded and p_check.stack > 0 and p_check.current_bet_in_round < self.current_bet_to_match_in_round:
-                        all_bets_equal = False
+                all_bets_equal_final_check = True
+                for p_final_check in self._get_active_players_in_hand():
+                    if p_final_check.stack > 0 and p_final_check.current_bet_in_round < self.current_bet_to_match_in_round:
+                        all_bets_equal_final_check = False
                         break
-                if all_bets_equal:
+
+                if all_bets_equal_final_check:
                     self.logger.log("Licytacja zakończona - wszyscy wyrównali po pełnej kolejce.")
                     betting_continues = False
                     break
                 else:
                     current_actor_queue_idx = 0
                     new_acting_indices = []
-                    start_check_idx = acting_players_indices[0]
-                    for i in range(len(self.players)):
-                        p_temp_idx = (start_check_idx + i) % len(self.players)
-                        p_temp = self.players[p_temp_idx]
-                        if not p_temp.is_folded and p_temp.stack >= 0:
-                            new_acting_indices.append(p_temp_idx)
+                    first_player_after_last_raiser_or_starter = acting_players_indices[0]
+
+                    idx_rebuild = first_player_after_last_raiser_or_starter
+                    for _ in range(len(self.players)):
+                        player_rebuild = self.players[idx_rebuild]
+                        if not player_rebuild.is_folded and player_rebuild.stack >= 0:
+                            new_acting_indices.append(idx_rebuild)
+                        idx_rebuild = (idx_rebuild + 1) % len(self.players)
+
                     acting_players_indices = new_acting_indices
                     if not acting_players_indices:
                         self.logger.log("Brak aktywnych graczy po resecie kolejki licytacji.")
@@ -462,14 +514,17 @@ class GameEngine:
                     player.stack == 0 and player.current_bet_in_round >= self.current_bet_to_match_in_round):
                 current_actor_queue_idx += 1
                 continue
-
-            if player.stack == 0 and player.current_bet_in_round < self.current_bet_to_match_in_round:
+            if player.stack == 0 and player.current_bet_in_round < self.current_bet_to_match_in_round:  # All-in za mniej
                 current_actor_queue_idx += 1
                 continue
 
-            action, amount = self.prompt_action(player)
-            amount_needed_to_call = self.current_bet_to_match_in_round - player.current_bet_in_round
+            action, amount = ("", 0)
+            if player.is_bot:
+                action, amount = self._get_bot_action(player)
+            else:
+                action, amount = self.prompt_human_action(player)
 
+            # Logika obsługi akcji (taka sama jak poprzednio)
             if action == "fold":
                 player.is_folded = True
                 self.logger.log(f"Gracz {player.name} spasował. Stack: {player.stack}")
@@ -478,6 +533,7 @@ class GameEngine:
                 self.logger.log(f"Gracz {player.name} czeka. Stack: {player.stack}")
                 print(f"{player.name} czeka.")
             elif action == "call":
+                amount_needed_to_call = self.current_bet_to_match_in_round - player.current_bet_in_round
                 to_pay = min(amount_needed_to_call, player.stack)
                 paid = player.pay_money(to_pay)
                 player.current_bet_in_round += paid
@@ -495,7 +551,8 @@ class GameEngine:
                 self.logger.log(
                     f"Gracz {player.name} stawia {player.current_bet_in_round} (dokładając {paid}). Pula: {self.pot}. Stack: {player.stack}")
                 print(f"{player.name} stawia {player.current_bet_in_round} (dokładając {paid}).")
-                last_raiser_idx = player_idx
+                # Reset kolejki, bo była agresja
+                current_actor_queue_idx = 0
                 new_acting_indices = []
                 start_check_idx = (player_idx + 1) % len(self.players)
                 for i in range(len(self.players)):
@@ -505,11 +562,7 @@ class GameEngine:
                     if not p_temp.is_folded and p_temp.stack >= 0:
                         new_acting_indices.append(p_temp_idx)
                 acting_players_indices = new_acting_indices
-                current_actor_queue_idx = 0
-                if not acting_players_indices:
-                    self.logger.log("Brak graczy do odpowiedzi na zakład.")
-                    betting_continues = False
-
+                if not acting_players_indices: betting_continues = False; continue
             elif action == "raise":
                 money_to_add_to_pot = amount - player.current_bet_in_round
                 paid = player.pay_money(min(money_to_add_to_pot, player.stack))
@@ -520,7 +573,8 @@ class GameEngine:
                 self.logger.log(
                     f"Gracz {player.name} przebija do {player.current_bet_in_round} (dokładając {paid}). Pula: {self.pot}. Stack: {player.stack}")
                 print(f"{player.name} przebija do {player.current_bet_in_round} (dokładając {paid}).")
-                last_raiser_idx = player_idx
+                # Reset kolejki
+                current_actor_queue_idx = 0
                 new_acting_indices = []
                 start_check_idx = (player_idx + 1) % len(self.players)
                 for i in range(len(self.players)):
@@ -530,72 +584,143 @@ class GameEngine:
                     if not p_temp.is_folded and p_temp.stack >= 0:
                         new_acting_indices.append(p_temp_idx)
                 acting_players_indices = new_acting_indices
-                current_actor_queue_idx = 0
-                if not acting_players_indices:
-                    self.logger.log("Brak graczy do odpowiedzi na przebicie.")
-                    betting_continues = False
+                if not acting_players_indices: betting_continues = False; continue
 
-            if betting_continues:
-                if action not in ["bet", "raise"]:
-                    current_actor_queue_idx += 1
+            if betting_continues and action not in ["bet", "raise"]:
+                current_actor_queue_idx += 1
+
         self.logger.log(f"--- Zakończenie rundy licytacji. Pula: {self.pot} ---")
+
+    def _get_bot_exchange_decision(self, bot: Player) -> List[int]:
+        """Prosta logika wymiany kart dla bota."""
+        self.logger.log(f"Bot {bot.name} decyduje o wymianie. Ręka: {bot.cards_to_str(True)}")
+        hand_cards = bot._Player__hand_[:]
+        hand_name, hand_value, tie_breakers = bot.hand_rank()
+
+        indices_to_discard = []
+
+        if hand_value >= Player.HAND_HIERARCHY["Trójka"]:
+            self.logger.log(f"Bot {bot.name} ma {hand_name}, nie wymienia kart.")
+            return []
+
+        if hand_value == Player.HAND_HIERARCHY["Dwie pary"]:
+            ranks = [card.get_rank_value() for card in hand_cards]
+            rank_counts = {r: ranks.count(r) for r in set(ranks)}
+            kicker_rank_val = -1
+            for r_val, count in rank_counts.items():
+                if count == 1:
+                    kicker_rank_val = r_val
+                    break
+            if kicker_rank_val != -1:
+                for i, card in enumerate(hand_cards):
+                    if card.get_rank_value() == kicker_rank_val:
+                        indices_to_discard.append(i)
+                        self.logger.log(f"Bot {bot.name} ma dwie pary, wymienia kickera: {card}")
+                        break
+            return indices_to_discard
+
+        if hand_value == Player.HAND_HIERARCHY["Para"]:
+            pair_rank_val = -1
+            ranks = [card.get_rank_value() for card in hand_cards]
+            rank_counts = {r: ranks.count(r) for r in set(ranks)}
+            for r_val, count in rank_counts.items():
+                if count == 2:
+                    pair_rank_val = r_val
+                    break
+
+            for i, card in enumerate(hand_cards):
+                if card.get_rank_value() != pair_rank_val:
+                    indices_to_discard.append(i)
+            pair_rank_display_str = Card.VALUE_TO_RANK_STR.get(pair_rank_val, 'NIEZNANA') if pair_rank_val != -1 else ''
+            self.logger.log(
+                f"Bot {bot.name} ma parę {pair_rank_display_str}, wymienia {len(indices_to_discard)} karty.")
+            return indices_to_discard
+
+        if len(hand_cards) == 5:
+            indexed_hand = list(enumerate(bot._Player__hand_))
+            indexed_hand.sort(key=lambda item: item[1].get_rank_value())
+
+            num_to_discard_high_card = min(3, len(indexed_hand))
+            for i in range(num_to_discard_high_card):
+                original_index = indexed_hand[i][0]
+                if original_index not in indices_to_discard:
+                    indices_to_discard.append(original_index)
+
+            if indices_to_discard:  # Tylko jeśli faktycznie coś jest do wyrzucenia
+                self.logger.log(f"Bot {bot.name} ma wysoką kartę, wymienia {len(indices_to_discard)} karty.")
+            return indices_to_discard
+
+        return []
 
     def _perform_card_exchange_for_player(self, player: Player):
         if player.is_folded: return
 
-        self.logger.log(f"Tura wymiany kart dla gracza {player.name}. Ręka: {player.cards_to_str()}")
-        print(f"\n{player.name}, twoja ręka: {player.cards_to_str()}")
-        current_hand_list = player._Player__hand_
-
-        num_exchange_str = input(f"Ile kart chcesz wymienić (0-{len(current_hand_list)}, Enter = 0)? ")
-        try:
-            num_to_exchange = int(num_exchange_str) if num_exchange_str else 0
-            if not 0 <= num_to_exchange <= len(current_hand_list):
-                num_to_exchange = 0
-        except ValueError:
-            num_to_exchange = 0
-
-        self.logger.log(f"Gracz {player.name} decyduje się wymienić {num_to_exchange} kart.")
-
-        if num_to_exchange == 0:
-            print(f"{player.name} nie wymienia kart.")
-            return
-
-        discarded_cards: List[Card] = []
-        print("Twoja obecna ręka (indeksy 0-4):")
-        for i, card_obj in enumerate(current_hand_list):
-            print(f"  {i}: {card_obj}")
-
         indices_to_replace: List[int] = []
-        for i in range(num_to_exchange):
-            while True:
-                try:
-                    idx_str = input(f"Podaj indeks karty #{i + 1} do wymiany (0-{len(current_hand_list) - 1}): ")
-                    idx = int(idx_str)
-                    if not 0 <= idx < len(current_hand_list) or idx in indices_to_replace:
-                        print("Nieprawidłowy lub powtórzony indeks.")
-                        continue
-                    indices_to_replace.append(idx)
-                    break
-                except ValueError:
-                    print("Nieprawidłowy indeks.")
+        num_to_exchange = 0
 
-        self.logger.log(f"Gracz {player.name} wymienia karty o indeksach: {indices_to_replace}")
-        indices_to_replace.sort(reverse=True)
-
-        for idx_in_hand in indices_to_replace:
-            new_card = self.deck.deal_one()
-            if new_card:
-                old_card = player.change_card(new_card, idx_in_hand)
-                discarded_cards.append(old_card)
-                self.logger.log(f"Gracz {player.name} wymienił {old_card} na {new_card}.")
+        if player.is_bot:
+            indices_to_replace = self._get_bot_exchange_decision(player)
+            num_to_exchange = len(indices_to_replace)
+            if num_to_exchange > 0:
+                print(f"{player.name} wymienia {num_to_exchange} kart.")
             else:
-                self.logger.log(f"Talia pusta podczas wymiany dla gracza {player.name}.")
-                print("Talia jest pusta, nie można dobrać nowych kart.")
-                break
-        if discarded_cards: self.deck.add_cards_to_bottom(discarded_cards)
-        self.logger.log(f"Gracz {player.name} - nowa ręka: {player.cards_to_str()}")
-        print(f"{player.name}, nowa ręka: {player.cards_to_str()}")
+                print(f"{player.name} nie wymienia kart.")
+        else:  # Gracz ludzki
+            self.logger.log(f"Tura wymiany kart dla gracza {player.name}. Ręka: {player.cards_to_str(True)}")
+            print(f"\n{player.name}, twoja ręka: {player.cards_to_str(True)}")
+            current_hand_list = player._Player__hand_
+
+            num_exchange_str = input(f"Ile kart chcesz wymienić (0-{len(current_hand_list)}, Enter = 0)? ")
+            try:
+                num_to_exchange = int(num_exchange_str) if num_exchange_str else 0
+                if not 0 <= num_to_exchange <= len(current_hand_list):
+                    num_to_exchange = 0
+            except ValueError:
+                num_to_exchange = 0
+
+            self.logger.log(f"Gracz {player.name} decyduje się wymienić {num_to_exchange} kart.")
+
+            if num_to_exchange == 0:
+                print(f"{player.name} nie wymienia kart.")
+                return
+
+            print("Twoja obecna ręka (indeksy 0-4):")
+            for i, card_obj in enumerate(current_hand_list):
+                print(f"  {i}: {card_obj}")
+
+            for i in range(num_to_exchange):
+                while True:
+                    try:
+                        idx_str = input(f"Podaj indeks karty #{i + 1} do wymiany (0-{len(current_hand_list) - 1}): ")
+                        idx = int(idx_str)
+                        if not 0 <= idx < len(current_hand_list) or idx in indices_to_replace:
+                            print("Nieprawidłowy lub powtórzony indeks.")
+                            continue
+                        indices_to_replace.append(idx)
+                        break
+                    except ValueError:
+                        print("Nieprawidłowy indeks.")
+            self.logger.log(f"Gracz {player.name} wymienia karty o indeksach: {indices_to_replace}")
+
+        if num_to_exchange > 0:
+            indices_to_replace.sort(reverse=True)
+            discarded_cards: List[Card] = []
+            for idx_in_hand in indices_to_replace:
+                new_card = self.deck.deal_one()
+                if new_card:
+                    old_card = player.change_card(new_card, idx_in_hand)
+                    discarded_cards.append(old_card)
+                    self.logger.log(f"Gracz {player.name} wymienił {old_card} na {new_card}.")
+                else:
+                    self.logger.log(f"Talia pusta podczas wymiany dla gracza {player.name}.")
+                    print("Talia jest pusta, nie można dobrać nowych kart.")
+                    break
+            if discarded_cards: self.deck.add_cards_to_bottom(discarded_cards)
+
+        if not player.is_bot or num_to_exchange > 0:  # Pokaż nową rękę graczowi lub jeśli bot coś wymienił
+            self.logger.log(
+                f"Gracz {player.name} - nowa ręka: {player.cards_to_str(True if not player.is_bot else False)}")
+            print(f"{player.name}, nowa ręka: {player.cards_to_str(True if not player.is_bot else False)}")
 
     def showdown(self) -> None:
         self.logger.log(f"--- Rozpoczęcie Showdown. Pula: {self.pot} ---")
@@ -622,8 +747,8 @@ class GameEngine:
             eval_result = player.hand_rank()
             player_evals.append((player, eval_result))
             self.logger.log(
-                f"Showdown: {player.name} ma {eval_result[0]} ({player.cards_to_str()}), Tie-breakers: {eval_result[2]}")
-            print(f"{player.name}: {player.cards_to_str()} -> {eval_result[0]} (Tie: {eval_result[2]})")
+                f"Showdown: {player.name} ma {eval_result[0]} ({player.cards_to_str(True)}), Tie-breakers: {eval_result[2]}")
+            print(f"{player.name}: {player.cards_to_str(True)} -> {eval_result[0]} (Tie: {eval_result[2]})")
 
         player_evals.sort(key=lambda x: (x[1][1], x[1][2]), reverse=True)
 
@@ -648,14 +773,15 @@ class GameEngine:
             print("Błąd: Brak zwycięzcy.")
         self.logger.log("--- Zakończenie Showdown ---")
 
-    def play_round(self, round_number: int) -> None:  # Dodano round_number
+    def play_round(self, round_number: int) -> None:
         self.logger.log(f"====== NOWA RUNDA #{round_number} ======")
-        print("\n" + "=" * 10 + f" NOWA RUNDA #{round_number} " + "=" * 10)  # Wyświetl numer rundy
+        print("\n" + "=" * 10 + f" NOWA RUNDA #{round_number} " + "=" * 10)
         self.pot = 0
         self.current_bet_to_match_in_round = 0
         self.deck = Deck()
         self.logger.log(f"Stworzono nową talię ({len(self.deck.cards)} kart).")
         self.deck.shuffle()
+        self.logger.log("Talia została potasowana.")
 
         for p in self.players:
             discarded = p.clear_hand()
@@ -663,23 +789,39 @@ class GameEngine:
         self.logger.log("Wyczyszczono ręce graczy.")
 
         self.dealer_button_idx = (self.dealer_button_idx + 1) % len(self.players)
+        actual_dealer_idx_candidate = self.dealer_button_idx
+        self.dealer_button_idx = self._find_next_player_idx_with_condition(
+            actual_dealer_idx_candidate, lambda p: p.stack > 0
+        )
+        if self.dealer_button_idx == -1:
+            self.dealer_button_idx = actual_dealer_idx_candidate  # Wróć do kandydata
+
         self.logger.log(f"Dealerem jest: {self.players[self.dealer_button_idx].name}")
         print(f"Dealerem jest: {self.players[self.dealer_button_idx].name}")
 
         first_to_act_idx = self._post_blinds()
 
         active_for_blinds = self._get_active_players_in_hand()
-        if len(active_for_blinds) < 2 and self.pot > 0:
-            self.logger.log("Gra kończy się po blindach, za mało aktywnych graczy.")
-            print("Gra kończy się po blindach.")
+        if len(active_for_blinds) < 1:
+            self.logger.log("Gra kończy się po blindach, za mało aktywnych graczy lub wszyscy all-in.")
+            print("Gra kończy się po blindach (np. wszyscy all-in).")
             self.showdown()
+            return
+        if len(active_for_blinds) == 1 and self.pot > 0:  # Jeśli został tylko 1 gracz, zgarnia pulę
+            self.logger.log(f"Gra kończy się po blindach, {active_for_blinds[0].name} wygrywa pulę {self.pot}.")
+            print(f"{active_for_blinds[0].name} wygrywa pulę {self.pot} po blindach.")
+            active_for_blinds[0].receive_money(self.pot)
+            self.pot = 0
             return
 
         self.logger.log("--- Rozdawanie kart ---")
         print("\n--- Rozdawanie kart ---")
         self.deck.deal(self.players, 5, self.logger)
         for p in self.players:
-            if not p.is_folded: print(p)
+            if not p.is_folded:
+                # Pokaż karty tylko graczowi ludzkiemu
+                if not p.is_bot:
+                    print(p)
 
         if len(self._get_active_players_in_hand()) > 1:
             self._betting_round(start_player_idx=first_to_act_idx)
@@ -724,11 +866,18 @@ if __name__ == "__main__":
         print("Błąd w pliku config.json. Używam wartości domyślnych.")
         config = {"initial_stack": 1000, "small_blind": 25, "big_blind": 50, "num_players": 2}
 
+    human_name = input("Podaj swoje imię: ") or "Gracz"
     player_list = Player.create_players(
         num_players=config.get("num_players", 2),
-        initial_stack=config["initial_stack"]
+        initial_stack=config["initial_stack"],
+        human_player_name=human_name
     )
-    game_logger.log(f"Utworzono {len(player_list)} graczy z początkowym stackiem {config['initial_stack']}.")
+    if config.get("num_players", 2) < 2:
+        player_list = Player.create_players(2, config["initial_stack"], human_name)
+        game_logger.log(f"Liczba graczy w configu mniejsza niż 2, ustawiono na 2.")
+
+    game_logger.log(
+        f"Utworzono {len(player_list)} graczy z początkowym stackiem {config['initial_stack']}. Gracz ludzki: {human_name}")
 
     game_deck = Deck()
 
@@ -737,13 +886,12 @@ if __name__ == "__main__":
         deck=game_deck,
         small_blind=config["small_blind"],
         big_blind=config["big_blind"],
-        logger=game_logger  # Przekaż logger do GameEngine
+        logger=game_logger
     )
 
     round_num = 0
     while True:
         round_num += 1
-        # Przekaż numer rundy do play_round, aby logować
 
         active_for_game = [p for p in engine.players if p.stack > 0]
         if len(active_for_game) < 2:
@@ -757,13 +905,20 @@ if __name__ == "__main__":
                 print("Brak graczy z żetonami.")
             break
 
-        engine.play_round(round_num)  # Przekaż numer rundy
+        engine.play_round(round_num)
 
         game_logger.log("--- Podsumowanie Stacków po rundzie ---")
         print("\n--- Podsumowanie Stacków ---")
         for p in engine.players:
             game_logger.log(f"Gracz {p.name}: {p.stack}")
             print(f"{p.name}: {p.stack}")
+
+        # Sprawdź, czy gracz ludzki ma jeszcze stack
+        human_player_obj = next((p for p in engine.players if not p.is_bot), None)
+        if human_player_obj and human_player_obj.stack <= 0:
+            print(f"\n{human_player_obj.name}, nie masz już żetonów. Koniec gry dla Ciebie.")
+            game_logger.log(f"Gracz ludzki {human_player_obj.name} stracił wszystkie żetony.")
+            break
 
         if input("\nZagrać kolejną rundę? (t/n): ").lower() != 't':
             game_logger.log("Gracz zdecydował się zakończyć grę.")
