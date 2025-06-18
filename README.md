@@ -1,3 +1,7 @@
+# Autor:
+# Michał Kalisiak 
+# nr albumu: 131448
+# Informatyka II lab 3
 # py2025-project-v2
 
 ## Temat projektu:
